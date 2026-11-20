@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ettienne: architecture decisions, built and tested</title>
+<meta name="description" content="Thirteen systems, ten ways to build each. The design I chose for every one, why, and the tested code behind it.">
+<style>
+@font-face { font-family: "Schibsted Grotesk"; src: url("fonts/schibsted-grotesk-latin-wght-normal.woff2") format("woff2"); font-weight: 400 900; font-display: swap; }
+:root {
+  --paper: #EDF0EA; --sheet: #F7F8F4; --ink: #17302B; --muted: #4E625C; --line: #C9D2C9;
+  --cobalt: #2348D6; --cobalt-soft: #9FB0EE; --amber: #B26A00; --focus: #2348D6;
+  --font: "Schibsted Grotesk", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--paper); color: var(--ink); font: 400 17px/1.55 var(--font); -webkit-font-smoothing: antialiased; }
+body { margin: 0; }
+a { color: var(--cobalt); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+header.top { padding: 28px 0 0; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.who { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+.who span { font-weight: 400; color: var(--muted); }
+.top nav a { margin-left: 22px; font-weight: 500; color: var(--ink); }
+
+.hero { padding: 72px 0 36px; display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: 48px; align-items: end; }
+.hero h1 { font-size: clamp(38px, 5.4vw, 68px); line-height: 1.02; letter-spacing: -0.035em; font-weight: 800; margin: 0; max-width: 13ch; }
+.hero p { margin: 0; color: var(--muted); max-width: 46ch; font-size: 18px; }
+
+/* The matrix: the one bold element */
+.matrix-wrap { background: var(--sheet); border: 1px solid var(--line); border-radius: 18px; padding: 8px 72px 4px 0; overflow-x: auto; }
+table.matrix { border-collapse: collapse; width: 100%; min-width: 980px; }
+.matrix th, .matrix td { padding: 0; }
+.matrix thead th { height: 150px; vertical-align: bottom; font-weight: 500; font-size: 14px; color: var(--muted); }
+.matrix thead th.col span { display: inline-block; transform: rotate(-52deg); transform-origin: left bottom; white-space: nowrap; translate: 18px -10px; width: 30px; }
+.matrix thead th.lead { text-align: left; padding: 0 18px 12px; vertical-align: bottom; font-size: 13px; }
+.matrix tbody tr.group th { text-align: left; font-size: 13px; font-weight: 600; color: var(--muted); padding: 22px 18px 6px; border-top: 1px solid var(--line); }
+.matrix tbody tr.group:first-child th { border-top: 0; }
+.matrix tr.row th { text-align: left; font-weight: 400; }
+.rowbtn { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 10px; width: 100%; padding: 9px 18px; border-radius: 10px; }
+.rowbtn b { font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+.rowbtn small { display: block; color: var(--muted); font-size: 14px; line-height: 1.35; max-width: 34ch; }
+.rowbtn .chev { align-self: center; color: var(--muted); font-size: 18px; transition: transform .2s ease; }
+.rowbtn[aria-expanded="true"] .chev { transform: rotate(90deg); color: var(--cobalt); }
+tr.row:hover .rowbtn, .rowbtn[aria-expanded="true"] { background: #E8ECE4; }
+td.cell { text-align: center; width: 62px; }
+.mark { display: inline-block; vertical-align: middle; }
+.m-poor { width: 14px; height: 2px; background: var(--line); }
+.m-possible { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--muted); opacity: .6; }
+.m-good { width: 14px; height: 14px; border-radius: 50%; background: var(--cobalt-soft); }
+.m-rec { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid var(--cobalt); position: relative; }
+.m-built { width: 18px; height: 18px; border-radius: 5px; background: var(--cobalt); position: relative; }
+.m-rec.m-built-in::after { content: ""; position: absolute; inset: 4px; border-radius: 4px; background: var(--cobalt); }
+.m-built.over { outline: 2.5px solid var(--amber); outline-offset: 3px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 26px; padding: 16px 4px 0; color: var(--muted); font-size: 14px; }
+.legend span { display: inline-flex; align-items: center; gap: 9px; }
+
+tr.detail td { padding: 0 18px 24px; }
+.panel { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 32px; padding: 22px; background: var(--paper); border-radius: 14px; }
+.panel img { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.panel .noshot { border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; background: var(--sheet); }
+.panel .noshot p { color: var(--muted); margin: 0 0 14px; }
+.panel .noshot dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; }
+.panel .noshot dt { font-weight: 700; }
+.panel .noshot dd { margin: 0; color: var(--muted); }
+.panel h3 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.02em; }
+.panel p { margin: 0 0 14px; max-width: 60ch; }
+.panel .choice { font-weight: 600; }
+.panel .choice em { font-style: normal; color: var(--cobalt); }
+.panel ul { margin: 0 0 16px; padding-left: 20px; }
+.panel .stack { color: var(--muted); font-size: 15px; }
+.links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.links a { display: inline-block; padding: 9px 14px; border-radius: 9px; font-weight: 600; text-decoration: none; border: 1.5px solid var(--cobalt); }
+.links a.primary { background: var(--cobalt); color: #fff; }
+
+section.how { padding: 88px 0 40px; display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 48px; }
+section.how h2, section.tools h2 { font-size: 34px; letter-spacing: -0.03em; line-height: 1.1; margin: 0 0 12px; font-weight: 800; }
+section.how > div > p { color: var(--muted); max-width: 42ch; margin: 0; }
+ol.legs { list-style: none; margin: 0; padding: 0; counter-reset: leg; display: grid; gap: 2px; }
+ol.legs li { counter-increment: leg; display: grid; grid-template-columns: 44px 150px 1fr; gap: 16px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--line); }
+ol.legs li::before { content: counter(leg); font-weight: 800; color: var(--cobalt); font-size: 22px; }
+ol.legs b { font-weight: 700; }
+ol.legs span { color: var(--muted); }
+
+section.tools { padding: 40px 0 72px; }
+.toolgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; margin-top: 20px; }
+.tool { border-top: 3px solid var(--ink); padding-top: 16px; }
+.tool h3 { margin: 0 0 8px; font-size: 21px; }
+.tool p { margin: 0 0 12px; color: var(--muted); max-width: 52ch; }
+
+footer { border-top: 1px solid var(--line); padding: 26px 0 48px; color: var(--muted); font-size: 15px; }
+
+@media (max-width: 860px) {
+  .hero { grid-template-columns: 1fr; gap: 20px; padding-top: 48px; }
+  .panel { grid-template-columns: 1fr; }
+  section.how { grid-template-columns: 1fr; gap: 20px; }
+  ol.legs li { grid-template-columns: 34px 1fr; }
+  ol.legs li span { grid-column: 2; }
+  .toolgrid { grid-template-columns: 1fr; }
+  .matrix tr.row th { position: sticky; left: 0; background: var(--sheet); z-index: 1; min-width: 150px; }
+  .rowbtn small { display: none; }
+  .matrix-wrap { padding-right: 48px; }
+  .panel { position: sticky; left: 12px; width: calc(100vw - 92px); padding: 16px; gap: 18px; }
+  .top nav a { margin: 0 18px 0 0; }
+  .top nav { width: 100%; }
+  .panel .noshot dl { grid-template-columns: 1fr; gap: 2px; }
+  .panel .noshot dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .rowbtn .chev { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="who">Ettienne <span>Senior engineer, agentic delivery</span></div>
+    <nav><a href="#how">How I work</a><a href="#tools">Tools</a><a href="https://github.com/Legion91919">GitHub</a></nav>
+  </header>
+
+  <section class="hero">
+    <h1>Thirteen systems. Ten ways to build each.</h1>
+    <p>Every project here started as a set of facts about the problem, compared against ten architectures. This is what the advisor recommended, what I actually built, and where I disagreed. Open a row to see the product, the reasoning and the tests.</p>
+  </section>
+
+  <div class="matrix-wrap">
+    <table class="matrix" aria-describedby="legend">
+      <thead><tr id="cols"><th class="lead" scope="col">System</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <div class="legend" id="legend">
+    <span><i class="mark m-rec m-built-in"></i> Recommended and built</span>
+    <span><i class="mark m-built over"></i> Built instead of the recommendation</span>
+    <span><i class="mark m-rec"></i> Recommended</span>
+    <span><i class="mark m-good"></i> Good alternative</span>
+    <span><i class="mark m-possible"></i> Possible</span>
+    <span><i class="mark m-poor"></i> Poor fit</span>
+  </div>
+
+  <section class="how" id="how">
+    <div>
+      <h2>How I work</h2>
+      <p>I set up the agents before they write code. Each project carries a hidden folder of context that every agent reads and updates, and nothing is built until the problem, the decision and the screens exist.</p>
+    </div>
+    <ol class="legs">
+      <li><b>Frame</b><span>One sentence for the problem, the risks ranked, the first demo named.</span></li>
+      <li><b>Map</b><span>Users, data and failure modes, with evidence for every architecture trait.</span></li>
+      <li><b>Decide</b><span>The advisor's comparison, an ADR with the options I turned down, and a design dossier.</span></li>
+      <li><b>Sketch</b><span>Three genuinely different screen designs, scored, one chosen with all four states.</span></li>
+      <li><b>Build in slices</b><span>A failing acceptance test first, then code, then a demo. One slice at a time.</span></li>
+      <li><b>Hand over</b><span>Runbook, owned secrets and the agent setup itself, checked by a readiness score.</span></li>
+    </ol>
+  </section>
+
+  <section class="tools" id="tools">
+    <h2>The tools behind them</h2>
+    <div class="toolgrid">
+      <div class="tool">
+        <h3>Agentic Engineering Kit</h3>
+        <p>Skills and subagents for every step, an architecture advisor that compares ten designs for any set of traits, a privacy guard on every commit, and a private index of my own code for agents to search.</p>
+        <div class="links"><a href="https://github.com/Legion91919/agentic-engineering-kit">Open the repo</a></div>
+      </div>
+      <div class="tool">
+        <h3>Building Blocks</h3>
+        <p>Login, subscriptions, notifications, idempotency, an outbox and a tamper-evident audit log as tested .NET packages, so each project starts from code it owns instead of rebuilding them.</p>
+        <div class="links"><a href="https://github.com/Legion91919/agentic-building-blocks">Open the repo</a></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>All companies, people and figures in these projects are invented. Every repo opens in GitHub Codespaces and runs its tests on start.</footer>
+</div>
+
+<script>
+const DATA = [{"slug": "casino-platform", "group": "Casino platform", "traits": ["SeveralBusinessAreas", "MoneyMovement", "RegulatoryAudit", "PersonalData", "MultiTenant", "ExternalPartnerIntegrations", "ComplexBusinessRules", "GlobalScale"], "options": [{"name": "Microservices (request/response)", "fit": "Recommended", "complexity": 5, "reason": "Matches the advisor's recommended style (Microservices)."}, {"name": "Event-driven microservices", "fit": "Good alternative", "complexity": 5, "reason": "Same family as the recommendation (Microservices); a valid variant if its trade-offs suit the team."}, {"name": "Modular monolith", "fit": "Possible", "complexity": 3, "reason": "Money: pair it with an append-only ledger and idempotency keys."}, {"name": "Modular monolith + CQRS read models", "fit": "Possible", "complexity": 3, "reason": "Money: pair it with an append-only ledger and idempotency keys."}, {"name": "Event-sourced core with CQRS", "fit": "Possible", "complexity": 4, "reason": "Money: pair it with an append-only ledger and idempotency keys."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Layered monolith", "fit": "Poor fit", "complexity": 1, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Vertical slice monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Clean Architecture monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Serverless functions + queues", "fit": "Poor fit", "complexity": 3, "reason": "Consistency-critical money or stock operations are awkward across stateless functions."}], "name": "Casino Platform", "line": "Six services for casino operators and the studios that publish games to them", "problem": "Operators need a wallet, player protection, game launch, bonuses and regulator reporting that never lose a cent or a record, across several jurisdictions.", "built": "Event-driven microservices", "note": "Design stage. Each service owns its PostgreSQL database; events travel through a transactional outbox. Cashier, Pitboss, Dealer, Comps, Countroom and Backstage each have their own ADR, API contract and tested schema.", "proof": ["58 PostgreSQL tables", "175 database tests passing", "11 versioned event contracts"], "stack": "PostgreSQL 16, .NET 8, JSON Schema, OpenAPI", "shot": null, "services": [["Cashier", "Wallet and bet ledger: stakes, wins and rollbacks that never move money twice"], ["Pitboss", "Player limits, self-exclusion and per-jurisdiction rules, checked before every stake"], ["Dealer", "Game catalogue and launch for studios: certification, gradual rollout, kill switch"], ["Comps", "Bonuses with wagering tracked from bet events, kept apart from cash"], ["Countroom", "Bet and GGR reporting on day-partitioned tables, sealed regulator exports"], ["Backstage", "The game-team portal: service templates, scorecards and AI-governance checks"]]}, {"slug": "clio", "group": "Lending", "traits": ["DocumentIngestion", "RegulatoryAudit", "ComplexBusinessRules", "SmallTeam"], "options": [{"name": "Clean Architecture monolith", "fit": "Recommended", "complexity": 2, "reason": "Matches the advisor's recommended style (CleanArchitecture)."}, {"name": "Layered monolith", "fit": "Possible", "complexity": 1, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Vertical slice monolith", "fit": "Possible", "complexity": 2, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Modular monolith", "fit": "Possible", "complexity": 3, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Modular monolith + CQRS read models", "fit": "Possible", "complexity": 3, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Serverless functions + queues", "fit": "Possible", "complexity": 3, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Event-sourced core with CQRS", "fit": "Possible", "complexity": 4, "reason": "Audit: the event log is the audit trail, with replay for free."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Clio", "line": "Reads loan terms out of scanned term sheets", "problem": "Credit analysts copy loan amounts, margins and maturities from PDFs by hand, which delays screening and causes keying errors.", "built": "Clean Architecture monolith", "note": "A background worker extracts each field with a confidence score and the page it came from. Uncertain fields wait for a person. A labelled test set gates accuracy on every change.", "proof": ["66 tests", "94 to 100% accuracy per field", "nothing wrong is auto-accepted"], "stack": ".NET 8, React, building blocks", "shot": "shots/clio.png"}, {"slug": "metis", "group": "Lending", "traits": ["ComplexBusinessRules", "DocumentIngestion", "SmallTeam"], "options": [{"name": "Clean Architecture monolith", "fit": "Recommended", "complexity": 2, "reason": "Matches the advisor's recommended style (CleanArchitecture)."}, {"name": "Layered monolith", "fit": "Possible", "complexity": 1, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Vertical slice monolith", "fit": "Possible", "complexity": 2, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Modular monolith", "fit": "Possible", "complexity": 3, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Modular monolith + CQRS read models", "fit": "Possible", "complexity": 3, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Serverless functions + queues", "fit": "Possible", "complexity": 3, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Event-sourced core with CQRS", "fit": "Poor fit", "complexity": 4, "reason": "Event sourcing's cost isn't repaid without audit, money or replay needs."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Metis", "line": "Ranks the inbound deal queue and explains every rank", "problem": "Loan applications were reviewed in arrival order, so strong deals waited behind weak ones.", "built": "Vertical slice monolith", "note": "The advisor suggested Clean Architecture; I chose vertical slices because every feature here is small and independent. Scoring rules are deterministic and the weights reload live without a deploy.", "proof": ["39 tests", "top three reasons on every score", "weights change without a restart"], "stack": ".NET 8, Angular, building blocks", "shot": "shots/metis.png"}, {"slug": "hestia", "group": "Lending", "traits": ["MultiTenant", "RegulatoryAudit", "PersonalData", "ReadHeavy", "SeveralBusinessAreas", "SmallTeam"], "options": [{"name": "Modular monolith + CQRS read models", "fit": "Recommended", "complexity": 3, "reason": "Matches the advisor's recommended style (ModularMonolith)."}, {"name": "Modular monolith", "fit": "Good alternative", "complexity": 3, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Event-sourced core with CQRS", "fit": "Good alternative", "complexity": 4, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Serverless functions + queues", "fit": "Possible", "complexity": 3, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Layered monolith", "fit": "Poor fit", "complexity": 1, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Vertical slice monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Clean Architecture monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Hestia", "line": "An investor portal where nobody sees anyone else's statements", "problem": "Fund investors received statements as email attachments, and nobody could say who had opened what.", "built": "Modular monolith", "note": "One central filter makes it impossible to query without a tenant, and a reflection test fails if any repository could bypass it. Every download is written to a hash-chained audit log.", "proof": ["55 tests", "every endpoint tested across tenants", "revocation takes effect immediately"], "stack": ".NET 8, Blazor, building blocks", "shot": "shots/hestia.png"}, {"slug": "chronos", "group": "Lending", "traits": ["MoneyMovement", "RegulatoryAudit", "LongRunningWorkflows", "SeveralBusinessAreas", "ComplexBusinessRules", "SmallTeam"], "options": [{"name": "Modular monolith", "fit": "Recommended", "complexity": 3, "reason": "Matches the advisor's recommended style (ModularMonolith)."}, {"name": "Modular monolith + CQRS read models", "fit": "Good alternative", "complexity": 3, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Event-sourced core with CQRS", "fit": "Good alternative", "complexity": 4, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Layered monolith", "fit": "Poor fit", "complexity": 1, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Vertical slice monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Clean Architecture monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Serverless functions + queues", "fit": "Poor fit", "complexity": 3, "reason": "Consistency-critical money or stock operations are awkward across stateless functions."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Chronos", "line": "A loan ledger that can show any balance on any past date", "problem": "Drawdowns, interest and repayments lived in spreadsheets, so balances were slow to confirm and hard to audit.", "built": "Event-sourced core with CQRS", "note": "The advisor rated event sourcing a good alternative for money with audit needs. I took it for point-in-time replay, and wrote down the cost: event versioning and projections.", "proof": ["49 tests", "150 random command sequences replayed", "four-eyes rule on drawdowns"], "stack": ".NET 8, React, building blocks", "shot": "shots/chronos.png"}, {"slug": "demeter", "group": "Lending", "traits": ["BatchDataFeeds", "ReadHeavy", "ExternalPartnerIntegrations", "RegulatoryAudit", "SmallTeam"], "options": [{"name": "Clean Architecture monolith", "fit": "Recommended", "complexity": 2, "reason": "Matches the advisor's recommended style (CleanArchitecture)."}, {"name": "Layered monolith", "fit": "Possible", "complexity": 1, "reason": "Batch feeds: scheduled, re-runnable import jobs fit well here."}, {"name": "Vertical slice monolith", "fit": "Possible", "complexity": 2, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Modular monolith", "fit": "Possible", "complexity": 3, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Modular monolith + CQRS read models", "fit": "Possible", "complexity": 3, "reason": "Read-heavy: separate read models keep queries fast."}, {"name": "Serverless functions + queues", "fit": "Possible", "complexity": 3, "reason": "Batch feeds: scheduled, re-runnable import jobs fit well here."}, {"name": "Event-sourced core with CQRS", "fit": "Possible", "complexity": 4, "reason": "Audit: the event log is the audit trail, with replay for free."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Demeter", "line": "Turns a dozen rent-roll layouts into one portfolio view", "problem": "Borrowers send rent rolls in different formats, and the monthly portfolio view was rebuilt by hand and rarely reconciled.", "built": "Layered monolith", "note": "A different stack on purpose: Python and DuckDB. Files that don't add up are quarantined with the exact difference, and every dashboard figure traces to its source file and line.", "proof": ["42 tests, 93% coverage", "re-loading a file changes nothing", "lineage to file and line"], "stack": "Python, FastAPI, DuckDB, TypeScript", "shot": "shots/demeter.png"}, {"slug": "janus", "group": "Lending", "traits": ["LegacySystems", "SeveralBusinessAreas", "ExternalPartnerIntegrations", "SmallTeam"], "options": [{"name": "Modular monolith", "fit": "Recommended", "complexity": 3, "reason": "Matches the advisor's recommended style (ModularMonolith)."}, {"name": "Modular monolith + CQRS read models", "fit": "Good alternative", "complexity": 3, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Serverless functions + queues", "fit": "Possible", "complexity": 3, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Layered monolith", "fit": "Poor fit", "complexity": 1, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Vertical slice monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Clean Architecture monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Event-sourced core with CQRS", "fit": "Poor fit", "complexity": 4, "reason": "Event sourcing's cost isn't repaid without audit, money or replay needs."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Janus", "line": "Moves features off an old system one at a time", "problem": "Loan servicing ran on an ageing terminal application that only two people understood.", "built": "Modular monolith", "note": "A strangler-fig facade routes each capability to the old or the new system at runtime. Shadow mode serves the old answer and checks the new one in the background. Contract tests prove both agree.", "proof": ["66 tests", "switch traffic without a deploy", "retries and a circuit breaker"], "stack": ".NET 8, React, building blocks", "shot": "shots/janus.png"}, {"slug": "framely", "group": "Consumer", "traits": ["MediaDelivery", "ReadHeavy", "PersonalData", "SeveralBusinessAreas", "SmallTeam"], "options": [{"name": "Modular monolith + CQRS read models", "fit": "Recommended", "complexity": 3, "reason": "Matches the advisor's recommended style (ModularMonolith)."}, {"name": "Modular monolith", "fit": "Good alternative", "complexity": 3, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Serverless functions + queues", "fit": "Possible", "complexity": 3, "reason": "Media: serve files from a CDN whatever the style."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Layered monolith", "fit": "Poor fit", "complexity": 1, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Vertical slice monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Clean Architecture monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Event-sourced core with CQRS", "fit": "Poor fit", "complexity": 4, "reason": "Event sourcing's cost isn't repaid without audit, money or replay needs."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Framely", "line": "A photo-first community for photographers", "problem": "Local photographers had no community of their own; big platforms bury stills under ads and video.", "built": "Modular monolith + CQRS read models", "note": "Each follower's feed is built when someone posts, and photos are served from a CDN path. Location data is removed from the image file unless the photographer opts in.", "proof": ["75 tests", "feeds paged by cursor", "EXIF stripped and verified"], "stack": ".NET 8, React", "shot": "shots/framely.png"}, {"slug": "plaza", "group": "Consumer", "traits": ["ReadHeavy", "PersonalData", "SeveralBusinessAreas", "LiveTracking", "SmallTeam"], "options": [{"name": "Modular monolith + CQRS read models", "fit": "Recommended", "complexity": 3, "reason": "Matches the advisor's recommended style (ModularMonolith)."}, {"name": "Modular monolith", "fit": "Good alternative", "complexity": 3, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Serverless functions + queues", "fit": "Possible", "complexity": 3, "reason": "Small team: low enough operational load to run comfortably."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Layered monolith", "fit": "Poor fit", "complexity": 1, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Vertical slice monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Clean Architecture monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Event-sourced core with CQRS", "fit": "Poor fit", "complexity": 4, "reason": "Event sourcing's cost isn't repaid without audit, money or replay needs."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Plaza", "line": "A neighbourhood network for notices that matter", "problem": "Neighbourhood associations ran on scattered chat groups, so safety notices got lost.", "built": "Modular monolith", "note": "Members of a group get a live notification within seconds. Moderators can remove posts, and every removal lands in a log nobody can edit. A deliberate break proved the live test catches failures.", "proof": ["45 tests", "live alerts over SignalR", "audited moderation"], "stack": ".NET 8, React, SignalR", "shot": "shots/plaza.png"}, {"slug": "relay", "group": "Consumer", "traits": ["MillionsOfLiveConnections", "PersonalData", "SmallTeam"], "options": [{"name": "Modular monolith", "fit": "Recommended", "complexity": 3, "reason": "Matches the advisor's recommended style (ModularMonolith)."}, {"name": "Modular monolith + CQRS read models", "fit": "Good alternative", "complexity": 3, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Layered monolith", "fit": "Poor fit", "complexity": 1, "reason": "Can't scale the hot part independently, and has no seams to extract it later."}, {"name": "Vertical slice monolith", "fit": "Poor fit", "complexity": 2, "reason": "Can't scale the hot part independently, and has no seams to extract it later."}, {"name": "Clean Architecture monolith", "fit": "Poor fit", "complexity": 2, "reason": "Can't scale the hot part independently, and has no seams to extract it later."}, {"name": "Serverless functions + queues", "fit": "Poor fit", "complexity": 3, "reason": "Functions are a poor host for very many long-lived connections."}, {"name": "Event-sourced core with CQRS", "fit": "Poor fit", "complexity": 4, "reason": "Event sourcing's cost isn't repaid without audit, money or replay needs."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Relay", "line": "Private messaging built for patchy networks", "problem": "Prepaid customers with no airtime couldn't message on zero-rated data.", "built": "Modular monolith", "note": "Phones create the message IDs, so a retry can never send twice. Offline phones get missed messages in order. Messages are encrypted on the server and deleted once delivered.", "proof": ["91 tests", "message text never reaches logs", "delivered and read ticks"], "stack": ".NET 8, React, SignalR", "shot": "shots/relay.png"}, {"slug": "cinewave", "group": "Consumer", "traits": ["MediaDelivery", "ReadHeavy", "PersonalData", "MoneyMovement", "SeveralBusinessAreas", "SmallTeam"], "options": [{"name": "Modular monolith + CQRS read models", "fit": "Recommended", "complexity": 3, "reason": "Matches the advisor's recommended style (ModularMonolith)."}, {"name": "Modular monolith", "fit": "Good alternative", "complexity": 3, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Event-sourced core with CQRS", "fit": "Good alternative", "complexity": 4, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Layered monolith", "fit": "Poor fit", "complexity": 1, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Vertical slice monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Clean Architecture monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Serverless functions + queues", "fit": "Poor fit", "complexity": 3, "reason": "Consistency-critical money or stock operations are awkward across stateless functions."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Cinewave", "line": "Subscription streaming for African cinema", "problem": "A distributor's catalogue of 600 films only reached cinemas and festivals.", "built": "Modular monolith", "note": "The catalogue shows only titles licensed in your country. Video streams from a CDN path, never through the API, and progress follows you from phone to TV.", "proof": ["49 tests", "resume on another device", "402 with a renew link when expired"], "stack": ".NET 8, React, HLS", "shot": "shots/cinewave.png"}, {"slug": "wavelength", "group": "Consumer", "traits": ["MediaDelivery", "ReadHeavy", "PersonalData", "MoneyMovement", "SeveralBusinessAreas", "ExternalPartnerIntegrations", "SmallTeam"], "options": [{"name": "Modular monolith + CQRS read models", "fit": "Recommended", "complexity": 3, "reason": "Matches the advisor's recommended style (ModularMonolith)."}, {"name": "Modular monolith", "fit": "Good alternative", "complexity": 3, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Event-sourced core with CQRS", "fit": "Good alternative", "complexity": 4, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Layered monolith", "fit": "Poor fit", "complexity": 1, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Vertical slice monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Clean Architecture monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Serverless functions + queues", "fit": "Poor fit", "complexity": 3, "reason": "Consistency-critical money or stock operations are awkward across stateless functions."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Wavelength", "line": "Music streaming that pays independent labels fairly", "problem": "Independent labels couldn't see who listened, so they couldn't pay artists fairly.", "built": "Modular monolith + CQRS read models", "note": "A play counts for royalties after 30 seconds and exactly once, even if the event arrives twice. Label statements reconcile to the cent against an append-only ledger.", "proof": ["78 tests", "accent-insensitive search", "statements reconcile exactly"], "stack": ".NET 8, React", "shot": "shots/wavelength.png"}, {"slug": "huddle", "group": "Consumer", "traits": ["MoneyMovement", "RegulatoryAudit", "PersonalData", "SeveralBusinessAreas", "ExternalPartnerIntegrations", "ComplexBusinessRules", "SmallTeam"], "options": [{"name": "Modular monolith", "fit": "Recommended", "complexity": 3, "reason": "Matches the advisor's recommended style (ModularMonolith)."}, {"name": "Modular monolith + CQRS read models", "fit": "Good alternative", "complexity": 3, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Event-sourced core with CQRS", "fit": "Good alternative", "complexity": 4, "reason": "Same family as the recommendation (ModularMonolith); a valid variant if its trade-offs suit the team."}, {"name": "Static site + serverless function", "fit": "Poor fit", "complexity": 1, "reason": "The product has real server-side behaviour and data; a static site can't hold it."}, {"name": "Layered monolith", "fit": "Poor fit", "complexity": 1, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Vertical slice monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Clean Architecture monolith", "fit": "Poor fit", "complexity": 2, "reason": "Several business areas would tangle without module boundaries."}, {"name": "Serverless functions + queues", "fit": "Poor fit", "complexity": 3, "reason": "Consistency-critical money or stock operations are awkward across stateless functions."}, {"name": "Microservices (request/response)", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}, {"name": "Event-driven microservices", "fit": "Poor fit", "complexity": 5, "reason": "A small team can't run a distributed system well (deployments, tracing, on-call)."}], "name": "Huddle", "line": "Banking for stokvel savings groups", "problem": "Treasurers kept contributions in notebooks and chat groups, and members didn't trust the totals.", "built": "Modular monolith", "note": "A double-entry ledger with no balance column: balances are always summed from entries. Every payment carries an idempotency key, and 50 parallel payments never overdraw a wallet.", "proof": ["66 tests", "ledger always sums to zero", "retries never pay twice"], "stack": ".NET 8, React", "shot": "shots/huddle.png"}];
+const COLS = ["Static site + serverless function", "Layered monolith", "Vertical slice monolith", "Clean Architecture monolith", "Modular monolith", "Modular monolith + CQRS read models", "Event-sourced core with CQRS", "Serverless functions + queues", "Microservices (request/response)", "Event-driven microservices"];
+const SHORT = ["Static site", "Layered", "Vertical slices", "Clean Architecture", "Modular monolith", "Modular + CQRS", "Event sourcing", "Serverless", "Microservices", "Event-driven"];
+const GH = "https://github.com/Legion91919/";
+
+const cols = document.getElementById("cols");
+SHORT.forEach(s => { const th = document.createElement("th"); th.className = "col"; th.scope = "col"; th.innerHTML = `<span>${s}</span>`; cols.appendChild(th); });
+
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function mark(p, col) {
+  const o = p.options.find(x => x.name === col);
+  const built = p.built === col, rec = o && o.fit === "Recommended";
+  let cls, label;
+  if (rec && built) { cls = "m-rec m-built-in"; label = "recommended and built"; }
+  else if (built) { cls = "m-built over"; label = "built instead of the recommendation"; }
+  else if (rec) { cls = "m-rec"; label = "recommended"; }
+  else if (o && o.fit === "Good alternative") { cls = "m-good"; label = "good alternative"; }
+  else if (o && o.fit === "Possible") { cls = "m-possible"; label = "possible"; }
+  else { cls = "m-poor"; label = "poor fit"; }
+  return `<i class="mark ${cls}" role="img" aria-label="${esc(col)}: ${label}" title="${esc(col)}: ${label}${o ? " — " + esc(o.reason) : ""}"></i>`;
+}
+function panel(p) {
+  const rec = p.options.find(o => o.fit === "Recommended").name;
+  const agreed = rec === p.built;
+  const img = p.shot ? `<img src="${p.shot}" alt="The chosen screen design for ${esc(p.name)}" loading="lazy" width="1280" height="800">`
+                     : `<div class="noshot"><p>Six services, each owned by one team and its own database:</p><dl>${(p.services || []).map(([n, d]) => `<dt>${esc(n)}</dt><dd>${esc(d)}</dd>`).join("")}</dl></div>`;
+  return `<div class="panel"><div>${img}</div><div>
+    <h3>${esc(p.name)}</h3>
+    <p>${esc(p.problem)}</p>
+    <p class="choice">${agreed ? `Built as the advisor recommended: <em>${esc(p.built)}</em>.` : `Advisor recommended ${esc(rec)}; built as <em>${esc(p.built)}</em>.`}</p>
+    <p>${esc(p.note)}</p>
+    <ul>${p.proof.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+    <p class="stack">${esc(p.stack)}</p>
+    <div class="links">
+      <a class="primary" href="${GH}${p.slug}">Open the repo</a>
+      <a href="https://codespaces.new/Legion91919/${p.slug}?quickstart=1">Run in Codespaces</a>
+      <a href="${GH}${p.slug}/blob/main/docs/DESIGN.md">Read the design</a>
+    </div></div></div>`;
+}
+
+const tbody = document.getElementById("rows");
+let group = null;
+DATA.forEach((p, i) => {
+  if (p.group !== group) {
+    group = p.group;
+    tbody.insertAdjacentHTML("beforeend", `<tr class="group"><th colspan="${COLS.length + 1}" scope="rowgroup">${esc(group)}</th></tr>`);
+  }
+  const tr = document.createElement("tr"); tr.className = "row";
+  tr.innerHTML = `<th scope="row"><button class="rowbtn" aria-expanded="false" aria-controls="d${i}"><span><b>${esc(p.name)}</b><small>${esc(p.line)}</small></span><span class="chev" aria-hidden="true">›</span></button></th>`
+    + COLS.map(c => `<td class="cell">${mark(p, c)}</td>`).join("");
+  tbody.appendChild(tr);
+  const dr = document.createElement("tr"); dr.className = "detail"; dr.id = `d${i}`; dr.hidden = true;
+  dr.innerHTML = `<td colspan="${COLS.length + 1}">${panel(p)}</td>`;
+  tbody.appendChild(dr);
+  tr.querySelector("button").addEventListener("click", e => {
+    const open = e.currentTarget.getAttribute("aria-expanded") === "true";
+    e.currentTarget.setAttribute("aria-expanded", String(!open));
+    dr.hidden = open;
+  });
+});
+// Open the first project so the page shows a full example on arrival.
+tbody.querySelector(".rowbtn").click();
+</script>
+</body>
+</html>
